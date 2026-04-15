@@ -6,8 +6,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
+import { createBooking } from "../../lib/createBooking";
 
 type SlotMap = {
   [date: string]: string[];
@@ -24,22 +26,41 @@ export default function HomeScreen() {
   const dates = useMemo(() => Object.keys(availableSlots), []);
   const [selectedDate, setSelectedDate] = useState<string>(dates[0]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState("");
+  const [email, setEmail] = useState("");
 
   const timesForSelectedDate = availableSlots[selectedDate] || [];
 
-  const handleBook = () => {
+  const handleBook = async () => {
     if (!selectedDate || !selectedTime) {
       Alert.alert("Missing selection", "Please choose a day and time.");
       return;
     }
 
-    Alert.alert(
-      "Booking Confirmed",
-      `Your laundry pickup is booked for ${selectedDate} at ${selectedTime}.`
-    );
+    if (!customerName.trim() || !email.trim()) {
+      Alert.alert("Missing info", "Please enter your name and email.");
+      return;
+    }
 
-    // Later, this is where you would save the booking to Firebase/Firestore
-    // and remove the slot from availability if needed.
+    try {
+      await createBooking({
+        customerName: customerName.trim(),
+        email: email.trim(),
+        date: selectedDate,
+        timeSlot: selectedTime,
+      });
+
+      Alert.alert(
+        "Booking Confirmed",
+        `Your laundry pickup is booked for ${selectedDate} at ${selectedTime}.`
+      );
+
+      setSelectedTime(null);
+      setCustomerName("");
+      setEmail("");
+    } catch (error: any) {
+      Alert.alert("Booking Error", error.message || "Something went wrong.");
+    }
   };
 
   return (
@@ -103,6 +124,26 @@ export default function HomeScreen() {
           )}
         </View>
 
+        <Text style={styles.sectionTitle}>Your Info</Text>
+
+        <TextInput
+          placeholder="Your Name"
+          value={customerName}
+          onChangeText={setCustomerName}
+          style={styles.input}
+          placeholderTextColor={COLORS.subtext}
+        />
+
+        <TextInput
+          placeholder="Your Email"
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+          placeholderTextColor={COLORS.subtext}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Your Selection</Text>
           <Text style={styles.summaryText}>
@@ -110,6 +151,12 @@ export default function HomeScreen() {
           </Text>
           <Text style={styles.summaryText}>
             Time: {selectedTime || "None selected"}
+          </Text>
+          <Text style={styles.summaryText}>
+            Name: {customerName || "Not entered"}
+          </Text>
+          <Text style={styles.summaryText}>
+            Email: {email || "Not entered"}
           </Text>
         </View>
 
@@ -188,6 +235,16 @@ const styles = StyleSheet.create({
   },
   noSlotsText: {
     color: COLORS.subtext,
+    fontSize: 15,
+  },
+  input: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    color: COLORS.text,
     fontSize: 15,
   },
   summaryCard: {

@@ -1,4 +1,13 @@
-import { useMemo, useState } from "react";
+import {
+  Timestamp,
+  collection,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -7,17 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-type BookingMap = {
-  [date: string]: string[];
-};
-
-const sampleBookings: BookingMap = {
-  "2026-04-14": ["9:00 AM - 2 orders", "1:00 PM - 1 order"],
-  "2026-04-15": ["10:00 AM - 3 orders", "3:00 PM - 1 order"],
-  "2026-04-18": ["11:00 AM - 2 orders"],
-  "2026-04-22": ["9:30 AM - 1 order", "12:00 PM - 2 orders"],
-};
+import { db } from "../firebaseConfig";
 
 const COLORS = {
   primary: "#7CCBFF",
@@ -35,6 +34,18 @@ const COLORS = {
 
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+type Booking = {
+  id: string;
+  userId: string;
+  customerName: string;
+  email: string;
+  date: string;
+  timeSlot: string;
+  status: string;
+  bookingDateTime: Timestamp;
+  createdAt?: Timestamp;
+};
+
 type CalendarDay = {
   key: string;
   dayNumber: number | null;
@@ -45,6 +56,9 @@ type CalendarDay = {
 export default function AdminScreen() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [upcomingBookings, setUpcomingBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -53,6 +67,67 @@ export default function AdminScreen() {
     month: "long",
     year: "numeric",
   });
+
+  useEffect(() => {
+    loadBookings();
+  }, []);
+
+  const loadBookings = async () => {
+    try {
+      setLoading(true);
+
+      const bookingsRef = collection(db, "bookings");
+      const now = Timestamp.fromDate(new Date());
+
+      const allBookingsQuery = query(
+        bookingsRef,
+        where("status", "==", "upcoming")
+      );
+
+      const upcomingThreeQuery = query(
+        bookingsRef,
+        where("status", "==", "upcoming"),
+        where("bookingDateTime", ">=", now),
+        orderBy("bookingDateTime", "asc"),
+        limit(3)
+      );
+
+      const [allSnapshot, upcomingSnapshot] = await Promise.all([
+        getDocs(allBookingsQuery),
+        getDocs(upcomingThreeQuery),
+      ]);
+
+      const allData = allSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Booking[];
+
+      const upcomingData = upcomingSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Booking[];
+
+      setAllBookings(allData);
+      setUpcomingBookings(upcomingData);
+    } catch (error) {
+      console.log("Error loading bookings:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const bookingsByDate = useMemo(() => {
+    const map: Record<string, Booking[]> = {};
+
+    for (const booking of allBookings) {
+      if (!map[booking.date]) {
+        map[booking.date] = [];
+      }
+      map[booking.date].push(booking);
+    }
+
+    return map;
+  }, [allBookings]);
 
   const calendarDays = useMemo(() => {
     const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -76,14 +151,14 @@ export default function AdminScreen() {
         key: fullDate,
         dayNumber: day,
         fullDate,
-        hasBookings: Boolean(sampleBookings[fullDate]),
+        hasBookings: Boolean(bookingsByDate[fullDate]?.length),
       });
     }
 
     return days;
-  }, [month, year]);
+  }, [bookingsByDate, month, year]);
 
-  const selectedBookings = selectedDate ? sampleBookings[selectedDate] || [] : [];
+  const selectedBookings = selectedDate ? bookingsByDate[selectedDate] || [] : [];
 
   const goToPreviousMonth = () => {
     setCurrentMonth(new Date(year, month - 1, 1));
@@ -166,15 +241,37 @@ export default function AdminScreen() {
         </View>
 
         <View style={styles.detailsCard}>
+          <Text style={styles.detailsTitle}>Upcoming 3 Bookings</Text>
+
+          {loading ? (
+            <Text style={styles.emptyText}>Loading bookings...</Text>
+          ) : upcomingBookings.length > 0 ? (
+            upcomingBookings.map((booking) => (
+              <View key={booking.id} style={styles.bookingItem}>
+                <Text style={styles.bookingItemTitle}>{booking.customerName}</Text>
+                <Text style={styles.bookingItemText}>
+                  {booking.date} at {booking.timeSlot}
+                </Text>
+                <Text style={styles.bookingSubText}>{booking.email}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>No upcoming bookings.</Text>
+          )}
+        </View>
+
+        <View style={styles.detailsCard}>
           <Text style={styles.detailsTitle}>
             {selectedDate ? `Bookings for ${selectedDate}` : "Select a date"}
           </Text>
 
           {selectedDate ? (
             selectedBookings.length > 0 ? (
-              selectedBookings.map((booking, index) => (
-                <View key={`${booking}-${index}`} style={styles.bookingItem}>
-                  <Text style={styles.bookingItemText}>{booking}</Text>
+              selectedBookings.map((booking) => (
+                <View key={booking.id} style={styles.bookingItem}>
+                  <Text style={styles.bookingItemTitle}>{booking.customerName}</Text>
+                  <Text style={styles.bookingItemText}>{booking.timeSlot}</Text>
+                  <Text style={styles.bookingSubText}>{booking.email}</Text>
                 </View>
               ))
             ) : (
@@ -312,6 +409,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: 16,
+    marginBottom: 16,
   },
   detailsTitle: {
     fontSize: 18,
@@ -328,10 +426,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  bookingItemTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 4,
+  },
   bookingItemText: {
     fontSize: 15,
     color: COLORS.text,
     fontWeight: "500",
+  },
+  bookingSubText: {
+    fontSize: 14,
+    color: COLORS.secondaryText,
+    marginTop: 4,
   },
   emptyText: {
     fontSize: 15,
