@@ -1,11 +1,11 @@
 import {
-    addDoc,
-    collection,
-    getDocs,
-    query,
-    serverTimestamp,
-    Timestamp,
-    where,
+  addDoc,
+  collection,
+  getDocs,
+  query,
+  serverTimestamp,
+  Timestamp,
+  where,
 } from "firebase/firestore";
 import { auth, db } from "../app/firebaseConfig";
 import { SLOT_CAPACITY } from "../constants/timeSlots";
@@ -45,42 +45,59 @@ export async function createBooking({
   date,
   timeSlot,
 }: CreateBookingParams) {
-  const user = auth.currentUser;
+  try {
+    const user = auth.currentUser;
+    console.log("createBooking started");
+    console.log("auth user:", user?.uid, user?.email);
 
-  if (!user) throw new Error("Must be logged in");
+    if (!user) throw new Error("Must be logged in");
 
-  const bookingsRef = collection(db, "bookings");
+    const bookingsRef = collection(db, "bookings");
+    console.log("bookingsRef ready");
 
-  const bookingQuery = query(
-    bookingsRef,
-    where("date", "==", date),
-    where("timeSlot", "==", timeSlot),
-    where("status", "==", "upcoming")
-  );
+    const bookingQuery = query(
+      bookingsRef,
+      where("date", "==", date),
+      where("timeSlot", "==", timeSlot),
+      where("status", "==", "upcoming")
+    );
 
-  const snapshot = await getDocs(bookingQuery);
-  const count = snapshot.size;
+    console.log("query built");
 
-  const capacity = SLOT_CAPACITY[timeSlot] ?? 1;
+    const snapshot = await getDocs(bookingQuery);
+    console.log("query success, count:", snapshot.size);
 
-  if (count >= capacity) {
-    throw new Error("This slot is full");
+    const count = snapshot.size;
+    const capacity = SLOT_CAPACITY[timeSlot] ?? 1;
+
+    if (count >= capacity) {
+      throw new Error("This slot is full");
+    }
+
+    const bookingDateTime = buildBookingTimestamp(date, timeSlot);
+    console.log("timestamp built");
+
+    const newBooking = {
+      userId: user.uid,
+      customerName,
+      email,
+      date,
+      timeSlot,
+      bookingDateTime,
+      status: "upcoming",
+      createdAt: serverTimestamp(),
+    };
+
+    console.log("about to add doc", newBooking);
+
+    const docRef = await addDoc(bookingsRef, newBooking);
+    console.log("doc added:", docRef.id);
+
+    return docRef.id;
+  } catch (error: any) {
+    console.log("createBooking failed:", error);
+    throw error;
   }
 
-  const bookingDateTime = buildBookingTimestamp(date, timeSlot);
 
-  const newBooking = {
-    userId: user.uid,
-    customerName,
-    email,
-    date,
-    timeSlot,
-    bookingDateTime,
-    status: "upcoming",
-    createdAt: serverTimestamp(),
-  };
-
-  const docRef = await addDoc(bookingsRef, newBooking);
-
-  return docRef.id;
 }

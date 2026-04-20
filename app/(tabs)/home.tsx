@@ -28,6 +28,8 @@ export default function HomeScreen() {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [email, setEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBooked, setIsBooked] = useState(false);
 
   const timesForSelectedDate = availableSlots[selectedDate] || [];
 
@@ -43,12 +45,17 @@ export default function HomeScreen() {
     }
 
     try {
+      setIsSubmitting(true);
+      setIsBooked(false);
+
       await createBooking({
         customerName: customerName.trim(),
         email: email.trim(),
         date: selectedDate,
         timeSlot: selectedTime,
       });
+
+      setIsBooked(true);
 
       Alert.alert(
         "Booking Confirmed",
@@ -60,6 +67,8 @@ export default function HomeScreen() {
       setEmail("");
     } catch (error: any) {
       Alert.alert("Booking Error", error.message || "Something went wrong.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -81,6 +90,7 @@ export default function HomeScreen() {
                 onPress={() => {
                   setSelectedDate(date);
                   setSelectedTime(null);
+                  setIsBooked(false);
                 }}
               >
                 <Text
@@ -106,7 +116,10 @@ export default function HomeScreen() {
                 <Pressable
                   key={time}
                   style={[styles.optionButton, isSelected && styles.selectedButton]}
-                  onPress={() => setSelectedTime(time)}
+                  onPress={() => {
+                    setSelectedTime(time);
+                    setIsBooked(false);
+                  }}
                 >
                   <Text
                     style={[
@@ -129,7 +142,10 @@ export default function HomeScreen() {
         <TextInput
           placeholder="Your Name"
           value={customerName}
-          onChangeText={setCustomerName}
+          onChangeText={(text) => {
+            setCustomerName(text);
+            setIsBooked(false);
+          }}
           style={styles.input}
           placeholderTextColor={COLORS.subtext}
         />
@@ -137,7 +153,10 @@ export default function HomeScreen() {
         <TextInput
           placeholder="Your Email"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => {
+            setEmail(text);
+            setIsBooked(false);
+          }}
           style={styles.input}
           placeholderTextColor={COLORS.subtext}
           keyboardType="email-address"
@@ -160,8 +179,18 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        <Pressable style={styles.bookButton} onPress={handleBook}>
-          <Text style={styles.bookButtonText}>Book Now</Text>
+        <Pressable
+          style={[
+            styles.bookButton,
+            isSubmitting && styles.bookButtonDisabled,
+            isBooked && styles.bookedButton,
+          ]}
+          onPress={handleBook}
+          disabled={isSubmitting}
+        >
+          <Text style={styles.bookButtonText}>
+            {isSubmitting ? "Booking..." : isBooked ? "Booked" : "Book Now"}
+          </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -177,6 +206,7 @@ const COLORS = {
   subtext: "#6B7A88",
   border: "#D9E7F0",
   selectedText: "#FFFFFF",
+  success: "#4CAF50",
 };
 
 const styles = StyleSheet.create({
@@ -272,6 +302,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
+  },
+  bookedButton: {
+    backgroundColor: COLORS.success,
+  },
+  bookButtonDisabled: {
+    opacity: 0.6,
   },
   bookButtonText: {
     fontSize: 16,
