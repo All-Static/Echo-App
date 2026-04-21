@@ -7,8 +7,8 @@ import {
   Timestamp,
   where,
 } from "firebase/firestore";
-import { auth, db } from "../app/firebaseConfig";
 import { SLOT_CAPACITY } from "../constants/timeSlots";
+import { auth, db } from "./firebaseConfig";
 
 type CreateBookingParams = {
   customerName: string;

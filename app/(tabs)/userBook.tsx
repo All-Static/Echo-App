@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from "react";
+import { router } from "expo-router";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -9,7 +11,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+
 import { createBooking } from "../../lib/createBooking";
+import { auth } from "../../lib/firebaseConfig";
 
 type SlotMap = {
   [date: string]: string[];
@@ -30,8 +34,36 @@ export default function HomeScreen() {
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBooked, setIsBooked] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const timesForSelectedDate = availableSlots[selectedDate] || [];
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const signedInEmail = user.email ?? null;
+        setUserEmail(signedInEmail);
+
+        if (!email && signedInEmail) {
+          setEmail(signedInEmail);
+        }
+      } else {
+        router.replace("/login");
+      }
+    });
+
+    return unsubscribe;
+  }, [email]);
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      router.replace("/login");
+    } catch (error) {
+      console.log("Sign out error:", error);
+      Alert.alert("Sign Out Error", "Could not sign out. Please try again.");
+    }
+  };
 
   const handleBook = async () => {
     if (!selectedDate || !selectedTime) {
@@ -55,6 +87,10 @@ export default function HomeScreen() {
         timeSlot: selectedTime,
       });
 
+      router.push("/(tabs)/userBookings");
+
+      
+
       setIsBooked(true);
 
       Alert.alert(
@@ -64,7 +100,7 @@ export default function HomeScreen() {
 
       setSelectedTime(null);
       setCustomerName("");
-      setEmail("");
+      setEmail(userEmail || "");
     } catch (error: any) {
       Alert.alert("Booking Error", error.message || "Something went wrong.");
     } finally {
@@ -75,6 +111,19 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.topCard}>
+          <View>
+            <Text style={styles.signedInLabel}>Signed in as</Text>
+            <Text style={styles.signedInEmail}>
+              {userEmail || "Loading..."}
+            </Text>
+          </View>
+
+          <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+            <Text style={styles.signOutButtonText}>Sign Out</Text>
+          </Pressable>
+        </View>
+
         <Text style={styles.title}>Book Your Laundry Pickup</Text>
         <Text style={styles.subtitle}>Choose an available day and time</Text>
 
@@ -207,6 +256,7 @@ const COLORS = {
   border: "#D9E7F0",
   selectedText: "#FFFFFF",
   success: "#4CAF50",
+  danger: "#DC2626",
 };
 
 const styles = StyleSheet.create({
@@ -217,6 +267,39 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingBottom: 40,
+  },
+  topCard: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  signedInLabel: {
+    fontSize: 14,
+    color: COLORS.subtext,
+    marginBottom: 4,
+  },
+  signedInEmail: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  signOutButton: {
+    backgroundColor: COLORS.danger,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  signOutButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   title: {
     fontSize: 28,
